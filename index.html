@@ -1,0 +1,1033 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How does a computer see?</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: light;
+  --bg:#EEF1F6; --surface:#FFFFFF; --ink:#18233D; --muted:#56627A; --line:#CBD3E1;
+  --accent:#3346D3; --accent-ink:#FFFFFF; --bar:#3346D3; --bar-bg:#DDE3EE; --map-bg:#000004;
+  --display:"Bricolage Grotesque", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    color-scheme: dark;
+    --bg:#10162A; --surface:#182039; --ink:#E7ECF7; --muted:#9AA6BF; --line:#2B3655;
+    --accent:#8C9BFF; --accent-ink:#10162A; --bar:#8C9BFF; --bar-bg:#26304D;
+  }
+}
+*{box-sizing:border-box}
+html{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink); font-family:var(--body);
+  font-size:17px; line-height:1.5;
+  padding: env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);
+}
+main{max-width:1100px; margin:0 auto; padding:40px 20px 64px}
+h1{
+  font-family:var(--display); font-weight:800; font-size:clamp(2.6rem, 8vw, 5.2rem);
+  line-height:.95; letter-spacing:-.03em; margin:0 0 14px;
+}
+.lede{font-size:1.15rem; color:var(--muted); margin:0 0 28px; max-width:36ch}
+button{font:inherit; cursor:pointer}
+:focus-visible{outline:3px solid var(--accent); outline-offset:3px}
+[hidden]{display:none !important}
+
+.drop{
+  border:2px dashed var(--line); border-radius:18px; background:var(--surface);
+  padding:28px; display:flex; flex-wrap:wrap; gap:14px; align-items:center;
+}
+.drop.over{border-color:var(--accent)}
+.btn{
+  background:var(--accent); color:var(--accent-ink); border:0; border-radius:999px;
+  padding:13px 24px; font-weight:700; font-size:1.05rem;
+}
+.btn.ghost{background:transparent; color:var(--ink); border:2px solid var(--line)}
+.btn:disabled{opacity:.5; cursor:wait}
+.drop .hint{color:var(--muted); margin:0; flex:1 1 220px}
+#status{margin:14px 2px 0; color:var(--muted); min-height:1.5em}
+#status.error{color:#C2263A}
+@media (prefers-color-scheme: dark){ #status.error{color:#FF8A98} }
+
+/* results */
+.results-head{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:40px}
+.results-head h2{font-family:var(--display); font-weight:800; font-size:2rem; margin:0; letter-spacing:-.02em}
+.seg{display:inline-flex; border:2px solid var(--line); border-radius:999px; padding:3px}
+.seg button{border:0; background:transparent; color:var(--ink); padding:8px 20px; border-radius:999px; font-weight:700}
+.seg button[aria-pressed="true"]{background:var(--accent); color:var(--accent-ink)}
+#stage3d{
+  position:relative; margin-top:16px; height:min(72vh, 660px); min-height:380px;
+  border-radius:18px; background:var(--surface); overflow:hidden; touch-action:none;
+}
+#stage3d canvas{display:block; width:100%; height:100%; cursor:grab}
+#stage3d canvas:active{cursor:grabbing}
+.howto{color:var(--muted); font-size:.92rem; margin:10px 2px 0}
+
+/* flat view */
+.legend{margin:0 0 4px}
+.stage{
+  display:grid; grid-template-columns: 200px 1fr; gap:24px;
+  padding:26px 0; border-top:1px solid var(--line);
+}
+#flat{margin-top:16px}
+.stage h3{font-family:var(--display); font-weight:800; font-size:1.7rem; margin:0; letter-spacing:-.01em; line-height:1.1}
+.stage .what{margin:6px 0 4px; font-weight:700}
+.stage .size{margin:0; color:var(--muted); font-size:.92rem}
+.maps{display:grid; grid-template-columns:repeat(auto-fill, minmax(72px,1fr)); gap:6px}
+.maps button{padding:0; border:0; background:var(--map-bg); border-radius:4px; overflow:hidden; aspect-ratio:1; display:block}
+.maps canvas{width:100%; height:100%; display:block; image-rendering:pixelated}
+.maps button:hover canvas{opacity:.85}
+.inputView{width:min(100%, 260px); aspect-ratio:1; border-radius:6px; display:block; background:var(--map-bg)}
+
+/* guess */
+#guess{margin-top:36px; padding-top:26px; border-top:1px solid var(--line)}
+#guess h2{font-family:var(--display); font-weight:800; font-size:2rem; margin:0 0 16px; letter-spacing:-.02em}
+.preds{list-style:none; margin:0; padding:0; display:grid; gap:12px; max-width:560px}
+.preds li{display:grid; grid-template-columns: 1fr auto; gap:4px 12px; align-items:baseline}
+.preds .name{font-weight:700; font-size:1.1rem}
+.preds li:first-child .name{font-family:var(--display); font-size:1.6rem; font-weight:800}
+.preds .pct{color:var(--muted); font-variant-numeric:tabular-nums}
+.preds .track{grid-column:1/-1; height:10px; border-radius:5px; background:var(--bar-bg); overflow:hidden}
+.preds .fill{height:100%; background:var(--bar); border-radius:5px; width:0; transition:width .6s ease}
+.note{color:var(--muted); font-size:.92rem; margin:16px 0 0}
+
+dialog{border:0; border-radius:18px; padding:22px; background:var(--surface); color:var(--ink); width:min(92vw, 520px)}
+dialog::backdrop{background:rgba(8,12,24,.65)}
+.zoom{position:relative; width:100%; aspect-ratio:1; border-radius:8px; overflow:hidden; background:var(--map-bg)}
+.zoom canvas{position:absolute; inset:0; width:100%; height:100%}
+.dlg-head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px}
+.dlg-head h3{font-family:var(--display); font-weight:800; font-size:1.4rem; margin:0}
+.close{background:transparent; border:2px solid var(--line); color:var(--ink); border-radius:999px; width:40px; height:40px; font-size:1.2rem; line-height:1}
+.slider{display:flex; gap:12px; align-items:center; margin-top:14px; color:var(--muted)}
+.slider input{flex:1; accent-color:var(--accent)}
+
+/* mode chooser */
+.modes{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:0 0 18px; max-width:620px}
+.mode{text-align:left; background:var(--surface); color:var(--ink); border:2px solid var(--line); border-radius:18px; padding:16px 18px}
+.mode strong{display:block; font-family:var(--display); font-weight:800; font-size:1.45rem; line-height:1.1}
+.mode span{display:block; color:var(--muted); font-size:.95rem; margin-top:4px}
+.mode[aria-pressed="true"]{border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent)}
+/* camera */
+#cam{margin-top:14px; background:var(--surface); border-radius:18px; padding:14px; max-width:560px}
+#cam video{width:100%; border-radius:10px; background:#000; display:block; aspect-ratio:4/3; object-fit:cover}
+#cam video.mirror{transform:scaleX(-1)}
+#cam .row{display:flex; gap:10px; margin-top:12px; flex-wrap:wrap}
+.age-big{font-family:var(--display); font-weight:800; font-size:clamp(3.4rem, 12vw, 6rem); line-height:1; letter-spacing:-.03em; margin:0}
+.age-unit{font-size:1.2rem; color:var(--muted); margin:6px 0 0}
+@media (max-width:640px){ .mode strong{font-size:1.2rem} .mode{padding:14px} }
+
+footer{max-width:1100px; margin:0 auto; padding:24px 20px 40px; color:var(--muted); font-size:.9rem; border-top:1px solid var(--line)}
+footer p{margin:4px 0}
+
+@media (max-width:640px){
+  main{padding-top:28px}
+  .stage{grid-template-columns:1fr; gap:12px}
+  .maps{grid-template-columns:repeat(4, 1fr)}
+  #stage3d{height:68vh}
+}
+@media (prefers-reduced-motion: reduce){ .preds .fill{transition:none} }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<main>
+  <h1>How does a<br>computer see?</h1>
+  <div class="modes" role="group" aria-label="What should the computer guess?">
+    <button type="button" class="mode" id="modeObj" aria-pressed="true"><strong>What is it?</strong><span>Show it an object</span></button>
+    <button type="button" class="mode" id="modeAge" aria-pressed="false"><strong>How old?</strong><span>Show it a face</span></button>
+  </div>
+  <p class="lede" id="lede">Show it a picture. See how the computer breaks it into small patterns, step by step, and then guesses what it is.</p>
+
+  <div class="drop" id="drop">
+    <button class="btn" id="camBtn" disabled>Take a photo</button>
+    <button class="btn ghost" id="pick" disabled>Choose a photo</button>
+    <button class="btn ghost" id="pattern" disabled>Try a test picture</button>
+    <p class="hint">You can also drag or paste a photo here.</p>
+    <input type="file" id="file" accept="image/*" hidden>
+    <input type="file" id="fileCam" accept="image/*" hidden>
+  </div>
+  <div id="cam" hidden>
+    <video id="video" playsinline muted autoplay></video>
+    <div class="row">
+      <button class="btn" id="snap">Snap</button>
+      <button class="btn ghost" id="camCancel">Cancel</button>
+    </div>
+  </div>
+  <p id="status" role="status">Getting ready…</p>
+
+  
+<section id="results" hidden>
+    <div class="results-head">
+      <h2>What the computer sees</h2>
+      <div class="seg" id="seg" role="group" aria-label="View">
+        <button type="button" id="btn3d" aria-pressed="true">3D</button>
+        <button type="button" id="btnFlat" aria-pressed="false">Flat</button>
+      </div>
+    </div>
+    <div id="view3d">
+      <div id="stage3d"></div>
+      <p class="howto">Each square shows where one pattern was found: bright means “found it here”, dark means “not here”. Drag to turn, pinch or scroll to zoom, and tap a square to see which part of the photo it looked at.</p>
+    </div>
+    <div id="flat" hidden></div>
+    <div id="guess"></div>
+  </section>
+</main>
+
+<footer>
+  <p>Made by Nagham Omar, Technion.</p>
+  <p>Everything runs on this device. Your photo is not sent anywhere. Built with the free tools TensorFlow.js and face-api.js.</p>
+</footer>
+
+<dialog id="zoomDlg">
+  <div class="dlg-head">
+    <h3 id="zoomTitle">One pattern</h3>
+    <button class="close" id="zoomClose" aria-label="Close">✕</button>
+  </div>
+  <div class="zoom">
+    <canvas id="zoomBase" width="448" height="448"></canvas>
+    <canvas id="zoomMap" width="448" height="448"></canvas>
+  </div>
+  <label class="slider">Photo
+    <input type="range" id="zoomMix" min="0" max="100" value="100">
+    Pattern
+  </label>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script type="module">
+const LABELS = ["tench","goldfish","great white shark","tiger shark","hammerhead","electric ray","stingray","cock","hen","ostrich","brambling","goldfinch","house finch","junco","indigo bunting","robin","bulbul","jay","magpie","chickadee","water ouzel","kite","bald eagle","vulture","great grey owl","European fire salamander","common newt","eft","spotted salamander","axolotl","bullfrog","tree frog","tailed frog","loggerhead","leatherback turtle","mud turtle","terrapin","box turtle","banded gecko","common iguana","American chameleon","whiptail","agama","frilled lizard","alligator lizard","Gila monster","green lizard","African chameleon","Komodo dragon","African crocodile","American alligator","triceratops","thunder snake","ringneck snake","hognose snake","green snake","king snake","garter snake","water snake","vine snake","night snake","boa constrictor","rock python","Indian cobra","green mamba","sea snake","horned viper","diamondback","sidewinder","trilobite","harvestman","scorpion","black and gold garden spider","barn spider","garden spider","black widow","tarantula","wolf spider","tick","centipede","black grouse","ptarmigan","ruffed grouse","prairie chicken","peacock","quail","partridge","African grey","macaw","sulphur-crested cockatoo","lorikeet","coucal","bee eater","hornbill","hummingbird","jacamar","toucan","drake","red-breasted merganser","goose","black swan","tusker","echidna","platypus","wallaby","koala","wombat","jelly fish","sea anemone","brain coral","flatworm","nematode","conch","snail","slug","sea slug","chiton","chambered nautilus","Dungeness crab","rock crab","fiddler crab","king crab","American lobster","spiny lobster","crayfish","hermit crab","isopod","white stork","black stork","spoonbill","flamingo","little blue heron","American egret","bittern","crane","limpkin","European gallinule","American coot","bustard","ruddy turnstone","red-backed sandpiper","redshank","dowitcher","oystercatcher","pelican","king penguin","albatross","grey whale","killer whale","dugong","sea lion","Chihuahua","Japanese spaniel","Maltese dog","Pekinese","Shih-Tzu","Blenheim spaniel","papillon","toy terrier","Rhodesian ridgeback","Afghan hound","basset","beagle","bloodhound","bluetick","black-and-tan coonhound","Walker hound","English foxhound","redbone","borzoi","Irish wolfhound","Italian greyhound","whippet","Ibizan hound","Norwegian elkhound","otterhound","Saluki","Scottish deerhound","Weimaraner","Staffordshire bullterrier","American Staffordshire terrier","Bedlington terrier","Border terrier","Kerry blue terrier","Irish terrier","Norfolk terrier","Norwich terrier","Yorkshire terrier","wire-haired fox terrier","Lakeland terrier","Sealyham terrier","Airedale","cairn","Australian terrier","Dandie Dinmont","Boston bull","miniature schnauzer","giant schnauzer","standard schnauzer","Scotch terrier","Tibetan terrier","silky terrier","soft-coated wheaten terrier","West Highland white terrier","Lhasa","flat-coated retriever","curly-coated retriever","golden retriever","Labrador retriever","Chesapeake Bay retriever","German short-haired pointer","vizsla","English setter","Irish setter","Gordon setter","Brittany spaniel","clumber","English springer","Welsh springer spaniel","cocker spaniel","Sussex spaniel","Irish water spaniel","kuvasz","schipperke","groenendael","malinois","briard","kelpie","komondor","Old English sheepdog","Shetland sheepdog","collie","Border collie","Bouvier des Flandres","Rottweiler","German shepherd","Doberman","miniature pinscher","Greater Swiss Mountain dog","Bernese mountain dog","Appenzeller","EntleBucher","boxer","bull mastiff","Tibetan mastiff","French bulldog","Great Dane","Saint Bernard","Eskimo dog","malamute","Siberian husky","dalmatian","affenpinscher","basenji","pug","Leonberg","Newfoundland","Great Pyrenees","Samoyed","Pomeranian","chow","keeshond","Brabancon griffon","Pembroke","Cardigan","toy poodle","miniature poodle","standard poodle","Mexican hairless","timber wolf","white wolf","red wolf","coyote","dingo","dhole","African hunting dog","hyena","red fox","kit fox","Arctic fox","grey fox","tabby","tiger cat","Persian cat","Siamese cat","Egyptian cat","cougar","lynx","leopard","snow leopard","jaguar","lion","tiger","cheetah","brown bear","American black bear","ice bear","sloth bear","mongoose","meerkat","tiger beetle","ladybug","ground beetle","long-horned beetle","leaf beetle","dung beetle","rhinoceros beetle","weevil","fly","bee","ant","grasshopper","cricket","walking stick","cockroach","mantis","cicada","leafhopper","lacewing","dragonfly","damselfly","admiral","ringlet","monarch","cabbage butterfly","sulphur butterfly","lycaenid","starfish","sea urchin","sea cucumber","wood rabbit","hare","Angora","hamster","porcupine","fox squirrel","marmot","beaver","guinea pig","sorrel","zebra","hog","wild boar","warthog","hippopotamus","ox","water buffalo","bison","ram","bighorn","ibex","hartebeest","impala","gazelle","Arabian camel","llama","weasel","mink","polecat","black-footed ferret","otter","skunk","badger","armadillo","three-toed sloth","orangutan","gorilla","chimpanzee","gibbon","siamang","guenon","patas","baboon","macaque","langur","colobus","proboscis monkey","marmoset","capuchin","howler monkey","titi","spider monkey","squirrel monkey","Madagascar cat","indri","Indian elephant","African elephant","lesser panda","giant panda","barracouta","eel","coho","rock beauty","anemone fish","sturgeon","gar","lionfish","puffer","abacus","abaya","academic gown","accordion","acoustic guitar","aircraft carrier","airliner","airship","altar","ambulance","amphibian","analog clock","apiary","apron","ashcan","assault rifle","backpack","bakery","balance beam","balloon","ballpoint","Band Aid","banjo","bannister","barbell","barber chair","barbershop","barn","barometer","barrel","barrow","baseball","basketball","bassinet","bassoon","bathing cap","bath towel","bathtub","beach wagon","beacon","beaker","bearskin","beer bottle","beer glass","bell cote","bib","bicycle-built-for-two","bikini","binder","binoculars","birdhouse","boathouse","bobsled","bolo tie","bonnet","bookcase","bookshop","bottlecap","bow","bow tie","brass","brassiere","breakwater","breastplate","broom","bucket","buckle","bulletproof vest","bullet train","butcher shop","cab","caldron","candle","cannon","canoe","can opener","cardigan","car mirror","carousel","carpenter's kit","carton","car wheel","cash machine","cassette","cassette player","castle","catamaran","CD player","cello","cellular telephone","chain","chainlink fence","chain mail","chain saw","chest","chiffonier","chime","china cabinet","Christmas stocking","church","cinema","cleaver","cliff dwelling","cloak","clog","cocktail shaker","coffee mug","coffeepot","coil","combination lock","computer keyboard","confectionery","container ship","convertible","corkscrew","cornet","cowboy boot","cowboy hat","cradle","crane","crash helmet","crate","crib","Crock Pot","croquet ball","crutch","cuirass","dam","desk","desktop computer","dial telephone","diaper","digital clock","digital watch","dining table","dishrag","dishwasher","disk brake","dock","dogsled","dome","doormat","drilling platform","drum","drumstick","dumbbell","Dutch oven","electric fan","electric guitar","electric locomotive","entertainment center","envelope","espresso maker","face powder","feather boa","file","fireboat","fire engine","fire screen","flagpole","flute","folding chair","football helmet","forklift","fountain","fountain pen","four-poster","freight car","French horn","frying pan","fur coat","garbage truck","gasmask","gas pump","goblet","go-kart","golf ball","golfcart","gondola","gong","gown","grand piano","greenhouse","grille","grocery store","guillotine","hair slide","hair spray","half track","hammer","hamper","hand blower","hand-held computer","handkerchief","hard disc","harmonica","harp","harvester","hatchet","holster","home theater","honeycomb","hook","hoopskirt","horizontal bar","horse cart","hourglass","iPod","iron","jack-o'-lantern","jean","jeep","jersey","jigsaw puzzle","jinrikisha","joystick","kimono","knee pad","knot","lab coat","ladle","lampshade","laptop","lawn mower","lens cap","letter opener","library","lifeboat","lighter","limousine","liner","lipstick","Loafer","lotion","loudspeaker","loupe","lumbermill","magnetic compass","mailbag","mailbox","maillot","maillot","manhole cover","maraca","marimba","mask","matchstick","maypole","maze","measuring cup","medicine chest","megalith","microphone","microwave","military uniform","milk can","minibus","miniskirt","minivan","missile","mitten","mixing bowl","mobile home","Model T","modem","monastery","monitor","moped","mortar","mortarboard","mosque","mosquito net","motor scooter","mountain bike","mountain tent","mouse","mousetrap","moving van","muzzle","nail","neck brace","necklace","nipple","notebook","obelisk","oboe","ocarina","odometer","oil filter","organ","oscilloscope","overskirt","oxcart","oxygen mask","packet","paddle","paddlewheel","padlock","paintbrush","pajama","palace","panpipe","paper towel","parachute","parallel bars","park bench","parking meter","passenger car","patio","pay-phone","pedestal","pencil box","pencil sharpener","perfume","Petri dish","photocopier","pick","pickelhaube","picket fence","pickup","pier","piggy bank","pill bottle","pillow","ping-pong ball","pinwheel","pirate","pitcher","plane","planetarium","plastic bag","plate rack","plow","plunger","Polaroid camera","pole","police van","poncho","pool table","pop bottle","pot","potter's wheel","power drill","prayer rug","printer","prison","projectile","projector","puck","punching bag","purse","quill","quilt","racer","racket","radiator","radio","radio telescope","rain barrel","recreational vehicle","reel","reflex camera","refrigerator","remote control","restaurant","revolver","rifle","rocking chair","rotisserie","rubber eraser","rugby ball","rule","running shoe","safe","safety pin","saltshaker","sandal","sarong","sax","scabbard","scale","school bus","schooner","scoreboard","screen","screw","screwdriver","seat belt","sewing machine","shield","shoe shop","shoji","shopping basket","shopping cart","shovel","shower cap","shower curtain","ski","ski mask","sleeping bag","slide rule","sliding door","slot","snorkel","snowmobile","snowplow","soap dispenser","soccer ball","sock","solar dish","sombrero","soup bowl","space bar","space heater","space shuttle","spatula","speedboat","spider web","spindle","sports car","spotlight","stage","steam locomotive","steel arch bridge","steel drum","stethoscope","stole","stone wall","stopwatch","stove","strainer","streetcar","stretcher","studio couch","stupa","submarine","suit","sundial","sunglass","sunglasses","sunscreen","suspension bridge","swab","sweatshirt","swimming trunks","swing","switch","syringe","table lamp","tank","tape player","teapot","teddy","television","tennis ball","thatch","theater curtain","thimble","thresher","throne","tile roof","toaster","tobacco shop","toilet seat","torch","totem pole","tow truck","toyshop","tractor","trailer truck","tray","trench coat","tricycle","trimaran","tripod","triumphal arch","trolleybus","trombone","tub","turnstile","typewriter keyboard","umbrella","unicycle","upright","vacuum","vase","vault","velvet","vending machine","vestment","viaduct","violin","volleyball","waffle iron","wall clock","wallet","wardrobe","warplane","washbasin","washer","water bottle","water jug","water tower","whiskey jug","whistle","wig","window screen","window shade","Windsor tie","wine bottle","wing","wok","wooden spoon","wool","worm fence","wreck","yawl","yurt","web site","comic book","crossword puzzle","street sign","traffic light","book jacket","menu","plate","guacamole","consomme","hot pot","trifle","ice cream","ice lolly","French loaf","bagel","pretzel","cheeseburger","hotdog","mashed potato","head cabbage","broccoli","cauliflower","zucchini","spaghetti squash","acorn squash","butternut squash","cucumber","artichoke","bell pepper","cardoon","mushroom","Granny Smith","strawberry","orange","lemon","fig","pineapple","banana","jackfruit","custard apple","pomegranate","hay","carbonara","chocolate sauce","dough","meat loaf","pizza","potpie","burrito","red wine","espresso","cup","eggnog","alp","bubble","cliff","coral reef","geyser","lakeside","promontory","sandbar","seashore","valley","volcano","ballplayer","groom","scuba diver","rapeseed","daisy","yellow lady's slipper","corn","acorn","hip","buckeye","coral fungus","agaric","gyromitra","stinkhorn","earthstar","hen-of-the-woods","bolete","ear","toilet tissue"];
+
+const MODEL_URLS = [
+  'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.5_224/model.json',
+  'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/model.json',
+  'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json'
+];
+const FACE_API = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js';
+const FACE_MODELS = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model/';
+
+// MobileNet v1 has 28 layers. rf = how many input pixels one square "sees".
+const OBJ_STAGES = [
+  {name:'conv1_relu',      title:'Step 1', what:'Edges and colors',                 rf:3},
+  {name:'conv_pw_1_relu',  title:'Step 2', what:'Lines and corners',                rf:7},
+  {name:'conv_pw_3_relu',  title:'Step 3', what:'Small shapes',                     rf:19},
+  {name:'conv_pw_5_relu',  title:'Step 4', what:'Textures, like fur or cloth',      rf:43},
+  {name:'conv_pw_11_relu', title:'Step 5', what:'Parts, like eyes or wheels',       rf:219},
+  {name:'conv_pw_13_relu', title:'Step 6', what:'Big clues about what it is',       rf:315}
+];
+const AGE_WHAT = ['Edges and colors', 'Lines and corners', 'Small shapes', 'Skin and hair', 'Face parts, like eyes and mouth', 'Clues about age'];
+const MAPS_PER_LAYER = 16;
+const SIZE = 224;
+const FACE_NET_SIZE = 112;
+
+const $ = id => document.getElementById(id);
+const statusEl = $('status');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sleep = ms => new Promise(r => setTimeout(r, reduceMotion ? 0 : ms));
+
+let objModel = null, objStages = [], busy = false;
+let appMode = 'obj';            // 'obj' | 'age'
+let faceReady = null;           // promise once loading starts
+let current = null;             // results of the last run
+
+let THREE = null, OrbitControls = null;
+try {
+  THREE = await import('three');
+  ({OrbitControls} = await import('three/addons/controls/OrbitControls.js'));
+} catch (e) { console.warn('3D unavailable', e); THREE = null; }
+
+const LUT = (() => {
+  const stops = [[0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],[245,125,21],[250,193,39],[252,255,164]];
+  const lut = new Uint8ClampedArray(256*3);
+  for (let i = 0; i < 256; i++) {
+    const t = i/255*(stops.length-1), k = Math.min(Math.floor(t), stops.length-2), f = t-k;
+    for (let j = 0; j < 3; j++) lut[i*3+j] = stops[k][j] + (stops[k+1][j]-stops[k][j])*f;
+  }
+  return lut;
+})();
+
+function setStatus(msg, isError=false){
+  statusEl.textContent = msg;
+  statusEl.classList.toggle('error', isError);
+}
+function setButtons(on){
+  const ready = on && (appMode === 'obj' ? !!objModel : faceLoaded);
+  $('camBtn').disabled = !ready; $('pick').disabled = !ready; $('pattern').disabled = !ready;
+}
+
+/* ---------------- object network ---------------- */
+async function loadObjModel(){
+  for (const url of MODEL_URLS) {
+    try { return await tf.loadLayersModel(url); }
+    catch (e) { console.warn('Could not load', url, e); }
+  }
+  throw new Error('No model could be loaded');
+}
+
+function pickStages(model){
+  const names = new Set(model.layers.map(l => l.name));
+  let s = OBJ_STAGES.filter(st => names.has(st.name));
+  if (s.length >= 3) return s;
+  const relus = model.layers.filter(l => /relu/i.test(l.name) && Array.isArray(l.outputShape) && l.outputShape.length === 4);
+  const n = Math.min(6, relus.length);
+  s = [];
+  for (let i = 0; i < n; i++) {
+    const l = relus[Math.round(i*(relus.length-1)/Math.max(1, n-1))];
+    s.push({name:l.name, title:'Step '+(i+1), what:'', rf:null});
+  }
+  return s;
+}
+
+async function initObjects(){
+  try {
+    if (typeof tf === 'undefined') throw new Error('TensorFlow.js did not load');
+    const model = await loadObjModel();
+    objStages = pickStages(model);
+    const outputs = objStages.map(st => model.getLayer(st.name).output);
+    outputs.push(model.outputs[0]);
+    objModel = tf.model({inputs: model.inputs, outputs});
+    tf.tidy(() => { objModel.predict(tf.zeros([1, SIZE, SIZE, 3])); });
+    if (appMode === 'obj') { setStatus('Ready! Take or choose a photo.'); setButtons(true); }
+  } catch (e) {
+    console.error(e);
+    if (appMode === 'obj') setStatus('The program didn’t load. Check the internet and reload the page.', true);
+  }
+}
+
+/* ---------------- face (age) network ---------------- */
+let faceLoaded = false;
+function loadScript(src){
+  return new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('Could not load ' + src));
+    document.head.append(sc);
+  });
+}
+function ensureFace(){
+  if (!faceReady) {
+    faceReady = (async () => {
+      if (typeof faceapi === 'undefined') await loadScript(FACE_API);
+      await faceapi.tf.ready();
+      await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODELS);
+      await faceapi.nets.ageGenderNet.loadFromUri(FACE_MODELS);
+      faceLoaded = true;
+    })();
+    faceReady.catch(e => { console.error(e); faceReady = null; });
+  }
+  return faceReady;
+}
+
+/* ---------------- images in ---------------- */
+function squareCrop(src, w, h){
+  const c = document.createElement('canvas');
+  c.width = c.height = SIZE;
+  const s = Math.min(w, h);
+  c.getContext('2d').drawImage(src, (w-s)/2, (h-s)/2, s, s, 0, 0, SIZE, SIZE);
+  return c;
+}
+function fullCanvas(src, w, h, maxSide = 1024){
+  const k = Math.min(1, maxSide / Math.max(w, h));
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * k); c.height = Math.round(h * k);
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  return c;
+}
+function handleImage(src, w, h){
+  if (appMode === 'obj') runObjects(squareCrop(src, w, h));
+  else runAge(fullCanvas(src, w, h));
+}
+
+function loadFile(file){
+  if (!file || busy || $('pick').disabled) return;
+  if (!file.type.startsWith('image/')) { setStatus('That file isn’t an image. Try a JPG or PNG.', true); return; }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => { URL.revokeObjectURL(url); handleImage(img, img.naturalWidth, img.naturalHeight); };
+  img.onerror = () => { URL.revokeObjectURL(url); setStatus('This browser can’t open that image. Try a JPG or PNG.', true); };
+  img.src = url;
+}
+
+function testPattern(){
+  const c = document.createElement('canvas');
+  c.width = c.height = SIZE;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0,0,SIZE,SIZE);
+  for (let i = 0; i < 8; i++) { g.fillStyle = i%2 ? '#1f4fd8' : '#fff'; g.fillRect(i*14, 0, 14, 112); }
+  for (let i = 0; i < 8; i++) { g.fillStyle = i%2 ? '#e0312b' : '#fff'; g.fillRect(112, i*14, 112, 14); }
+  g.fillStyle = '#111'; g.beginPath(); g.arc(70, 168, 42, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#f5b800'; g.beginPath(); g.moveTo(168,126); g.lineTo(212,206); g.lineTo(124,206); g.closePath(); g.fill();
+  runObjects(c);
+}
+
+/* ---------------- camera ---------------- */
+let stream = null;
+async function openCamera(){
+  if (!navigator.mediaDevices?.getUserMedia) { openNativeCamera(); return; }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {facingMode: appMode === 'age' ? 'user' : 'environment', width: {ideal: 1280}, height: {ideal: 960}},
+      audio: false
+    });
+  } catch (e) {
+    console.warn(e);
+    if (e && e.name === 'NotAllowedError') { setStatus('The camera is blocked. Allow the camera in your browser, or choose a photo instead.', true); return; }
+    openNativeCamera(); return;
+  }
+  const v = $('video');
+  v.srcObject = stream;
+  const settings = stream.getVideoTracks()[0]?.getSettings?.() || {};
+  v.classList.toggle('mirror', settings.facingMode !== 'environment' && appMode === 'age');
+  $('cam').hidden = false;
+  setStatus(appMode === 'age' ? 'Look at the camera, then press Snap.' : 'Point the camera at something, then press Snap.');
+  $('cam').scrollIntoView({behavior: reduceMotion ? 'auto' : 'smooth', block: 'center'});
+}
+function openNativeCamera(){
+  const f = $('fileCam');
+  f.setAttribute('capture', appMode === 'age' ? 'user' : 'environment');
+  f.click();
+}
+function closeCamera(){
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  $('video').srcObject = null;
+  $('cam').hidden = true;
+}
+function snap(){
+  const v = $('video');
+  if (!v.videoWidth) return;
+  const c = document.createElement('canvas');
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  const g = c.getContext('2d');
+  if (v.classList.contains('mirror')) { g.translate(c.width, 0); g.scale(-1, 1); }
+  g.drawImage(v, 0, 0);
+  closeCamera();
+  handleImage(c, c.width, c.height);
+}
+
+/* ---------------- shared helpers ---------------- */
+function drawMap(canvas, act, ch){
+  const {data, h, w, c} = act;
+  canvas.width = w; canvas.height = h;
+  let min = Infinity, max = -Infinity;
+  for (let i = 0; i < h*w; i++) { const v = data[i*c+ch]; if (v < min) min = v; if (v > max) max = v; }
+  const range = (max - min) || 1;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  for (let i = 0; i < h*w; i++) {
+    const k = Math.round((data[i*c+ch]-min)/range*255)*3;
+    img.data[i*4] = LUT[k]; img.data[i*4+1] = LUT[k+1]; img.data[i*4+2] = LUT[k+2]; img.data[i*4+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
+function strongestChannels(act, n){
+  const {data, h, w, c} = act;
+  const sums = new Float64Array(c);
+  for (let i = 0; i < h*w; i++) { const o = i*c; for (let ch = 0; ch < c; ch++) sums[ch] += data[o+ch]; }
+  return Array.from(sums.keys()).sort((a,b) => sums[b]-sums[a]).slice(0, Math.min(n, c));
+}
+
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+const nice = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+async function startRun(){
+  if (busy) return false;
+  busy = true; setButtons(false);
+  setStatus('Thinking…');
+  await new Promise(r => requestAnimationFrame(r));
+  return true;
+}
+function endRun(){ busy = false; setButtons(true); }
+
+/* ---------------- run: what is it? ---------------- */
+async function runObjects(inputCanvas){
+  if (!objModel || !(await startRun())) return;
+  try {
+    const outs = tf.tidy(() => {
+      const x = tf.browser.fromPixels(inputCanvas).toFloat().div(127.5).sub(1).expandDims(0);
+      return objModel.predict(x);
+    });
+    const list = Array.isArray(outs) ? outs : [outs];
+    const acts = list.slice(0, -1).map(t => ({data:t.dataSync(), h:t.shape[1], w:t.shape[2], c:t.shape[3]}));
+    const probs = list[list.length-1].dataSync();
+    tf.dispose(list);
+    const top = Array.from(probs.keys()).sort((a,b) => probs[b]-probs[a]).slice(0, 5);
+    await showResults({
+      kind: 'obj', acts, stages: objStages, netSize: SIZE, inputCanvas,
+      chans: acts.map(a => strongestChannels(a, MAPS_PER_LAYER)),
+      guess: {probs, top}
+    });
+  } catch (e) {
+    console.error(e);
+    setStatus('Something went wrong. Try another photo.', true);
+  } finally { endRun(); }
+}
+
+/* ---------------- run: how old? ---------------- */
+// Records every convolution the face network runs, so we can show its real layers.
+async function captureAgeNet(faceCanvas){
+  const ftf = faceapi.tf;
+  const eng = ftf.engine();
+  const orig = eng.runKernel;
+  const ops = [];
+  let inside = false;
+  const CONV = new Set(['Conv2D', 'FusedConv2D', 'DepthwiseConv2dNative', 'FusedDepthwiseConv2D']);
+  const POOL = new Set(['MaxPool', 'AvgPool']);
+  eng.runKernel = function(name, inputs, attrs){
+    const out = orig.call(this, name, inputs, attrs);
+    if (!inside && (CONV.has(name) || POOL.has(name))) {
+      inside = true;
+      try {
+        const t = Array.isArray(out) ? out[0] : out;
+        const x = inputs && inputs.x;
+        if (t && t.rank === 4 && x && x.rank === 4) {
+          let k = 1;
+          if (CONV.has(name) && inputs.filter) k = inputs.filter.shape[0];
+          if (POOL.has(name) && attrs) k = Array.isArray(attrs.filterSize) ? attrs.filterSize[0] : (attrs.filterSize || 1);
+          const op = {name, k, inW: x.shape[2], outW: t.shape[2], conv: CONV.has(name)};
+          if (op.conv) op.t = ftf.keep(ftf.relu(t));
+          ops.push(op);
+        }
+      } finally { inside = false; }
+    }
+    return out;
+  };
+  let pred;
+  try { pred = await faceapi.nets.ageGenderNet.predictAgeAndGender(faceCanvas); }
+  finally { eng.runKernel = orig; }
+  if (Array.isArray(pred)) pred = pred[0];
+
+  // How much of the face each square can see (grows layer by layer)
+  const netSize = ops.length ? ops[0].inW : FACE_NET_SIZE;
+  let rf = 1;
+  for (const op of ops) { rf += (op.k - 1) * (netSize / op.inW); op.rf = rf; }
+
+  const convs = ops.filter(o => o.conv);
+  const n = Math.min(6, convs.length);
+  const picked = [];
+  for (let i = 0; i < n; i++) picked.push(Math.round(i * (convs.length - 1) / Math.max(1, n - 1)));
+  const acts = [], stages = [];
+  picked.forEach((ci, j) => {
+    const t = convs[ci].t;
+    acts.push({data: t.dataSync(), h: t.shape[1], w: t.shape[2], c: t.shape[3]});
+    stages.push({title: 'Step ' + (j + 1), what: AGE_WHAT[Math.round(j * (AGE_WHAT.length - 1) / Math.max(1, n - 1))], rf: convs[ci].rf});
+  });
+  convs.forEach(o => o.t.dispose());
+  return {age: pred ? pred.age : NaN, acts, stages, netSize};
+}
+
+async function runAge(srcCanvas){
+  if (!faceLoaded || !(await startRun())) return;
+  try {
+    setStatus('Looking for a face…');
+    const det = await faceapi.detectSingleFace(srcCanvas, new faceapi.TinyFaceDetectorOptions({inputSize: 416, scoreThreshold: 0.4}));
+    if (!det) { setStatus('No face found. Try a closer photo, looking straight at the camera.', true); return; }
+    const b = det.box;
+    const side = Math.max(b.width, b.height) * 1.15;
+    const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+    const face = document.createElement('canvas');
+    face.width = face.height = SIZE;
+    const g = face.getContext('2d');
+    g.fillStyle = '#000'; g.fillRect(0, 0, SIZE, SIZE);
+    g.drawImage(srcCanvas, cx - side / 2, cy - side / 2, side, side, 0, 0, SIZE, SIZE);
+    setStatus('Thinking…');
+    const r = await captureAgeNet(face);
+    if (!isFinite(r.age) || !r.acts.length) throw new Error('No age result');
+    await showResults({
+      kind: 'age', acts: r.acts, stages: r.stages, netSize: r.netSize, inputCanvas: face,
+      chans: r.acts.map(a => strongestChannels(a, MAPS_PER_LAYER)),
+      guess: {age: r.age}
+    });
+  } catch (e) {
+    console.error(e);
+    setStatus('Something went wrong. Try another photo.', true);
+  } finally { endRun(); }
+}
+
+/* ---------------- results ---------------- */
+async function showResults(res){
+  current = res;
+  $('results').hidden = false;
+  buildGuess();
+  buildFlat();
+  const scrollTo = () => $('results').scrollIntoView({behavior: reduceMotion ? 'auto' : 'smooth', block: 'start'});
+  if (view.has3D) {
+    if (!view.ready) init3D();
+    setMode(mode);
+    scrollTo();
+    if (mode === '3d') await build3D(); else view.stale = true;
+  } else {
+    setMode('flat');
+    scrollTo();
+  }
+  setStatus(view.has3D && mode === '3d'
+    ? 'Done! Tap any square to see which part of the photo it looked at.'
+    : 'Done! Tap any square to see it bigger, on top of your photo.');
+}
+
+function guessText(){
+  const g = current.guess;
+  if (current.kind === 'age') return {main: String(Math.round(g.age)), sub: 'years old'};
+  const i = g.top[0];
+  return {main: nice(LABELS[i] || ('class ' + i)), sub: (g.probs[i] * 100).toFixed(1) + '%'};
+}
+
+function buildGuess(){
+  const box = $('guess');
+  box.innerHTML = '';
+  box.append(el('h2', null, 'The guess'));
+  if (current.kind === 'age') {
+    box.append(el('p', 'age-big', 'About ' + Math.round(current.guess.age)));
+    box.append(el('p', 'age-unit', 'years old'));
+    box.append(el('p', 'note', 'The guess is often a few years off. Light, angle and smiling can change it. Try a different photo and see what happens!'));
+    return;
+  }
+  const {probs, top} = current.guess;
+  const ul = el('ul', 'preds');
+  const fills = [];
+  for (const i of top) {
+    const li = el('li');
+    li.append(el('span', 'name', nice(LABELS[i] || ('class ' + i))));
+    li.append(el('span', 'pct', (probs[i]*100).toFixed(1) + '%'));
+    const track = el('div', 'track'), fill = el('div', 'fill');
+    track.append(fill); li.append(track); ul.append(li);
+    fills.push([fill, probs[i]]);
+  }
+  box.append(ul);
+  box.append(el('p', 'note', 'It only knows 1000 kinds of things it learned from photos, so unusual things get funny guesses.'));
+  requestAnimationFrame(() => requestAnimationFrame(() => fills.forEach(([f, p]) => f.style.width = Math.max(1, p*100) + '%')));
+}
+
+function stageShell(title, what, size){
+  const sec = el('div', 'stage');
+  const left = el('div');
+  left.append(el('h3', null, title));
+  if (what) left.append(el('p', 'what', what));
+  if (size) left.append(el('p', 'size', size));
+  const right = el('div');
+  sec.append(left, right);
+  return {sec, right};
+}
+
+function buildFlat(){
+  const {acts, chans, inputCanvas, stages, kind} = current;
+  const flat = $('flat');
+  flat.innerHTML = '';
+  const inp = stageShell(kind === 'age' ? 'The face' : 'Your photo', '', `${current.netSize} × ${current.netSize} pixels`);
+  flat.append(el('p', 'note legend', 'Each square shows where one pattern was found. Bright means “found it here”. Dark means “not here”.'));
+  const v = el('canvas', 'inputView'); v.width = v.height = SIZE;
+  v.getContext('2d').drawImage(inputCanvas, 0, 0);
+  inp.right.append(v);
+  flat.append(inp.sec);
+  acts.forEach((a, s) => {
+    const st = stages[s];
+    const shell = stageShell(st.title, st.what, `The picture is now ${a.w} × ${a.h} pixels. It looks for ${a.c} patterns; here are the ${chans[s].length} it found most.`);
+    const grid = el('div', 'maps');
+    for (const ch of chans[s]) {
+      const b = el('button');
+      b.type = 'button';
+      b.setAttribute('aria-label', `${st.title}, pattern ${ch+1}. Open larger`);
+      b.append(drawMap(el('canvas'), a, ch));
+      b.addEventListener('click', () => openZoom(s, ch));
+      grid.append(b);
+    }
+    shell.right.append(grid);
+    flat.append(shell.sec);
+  });
+}
+
+/* ---------------- 3D view ---------------- */
+const view = {has3D: false, ready: false, visible: false, stale: false};
+let mode = '3d';
+const GAP = 6, INPUT = 6, RF_COLOR = 0x22D3EE;
+
+function webglOK(){
+  try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); }
+  catch { return false; }
+}
+view.has3D = !!THREE && webglOK();
+if (!view.has3D) { $('seg').hidden = true; mode = 'flat'; }
+
+function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function init3D(){
+  const box = $('stage3d');
+  const renderer = new THREE.WebGLRenderer({antialias: true, alpha: true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  box.append(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+  const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+  sun.position.set(6, 10, 8); scene.add(sun);
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 1000);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.autoRotateSpeed = 0.5;
+  controls.addEventListener('start', () => { controls.autoRotate = false; });
+  const group = new THREE.Group(); scene.add(group);
+  const rfGroup = new THREE.Group(); scene.add(rfGroup);
+  Object.assign(view, {renderer, scene, camera, controls, group, rfGroup, pickables: [], ready: true});
+
+  const resize = () => {
+    const w = box.clientWidth, h = box.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  };
+  new ResizeObserver(resize).observe(box);
+  resize();
+
+  let down = null;
+  renderer.domElement.addEventListener('pointerdown', e => { down = {x: e.clientX, y: e.clientY}; });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 6) pick(e);
+    down = null;
+  });
+
+  const loop = () => {
+    requestAnimationFrame(loop);
+    if (!view.visible || document.hidden) return;
+    controls.update();
+    renderer.render(scene, camera);
+  };
+  loop();
+}
+
+function disposeTree(obj){
+  obj.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
+    }
+  });
+  obj.clear();
+}
+
+function makeLabel(lines, height){
+  const ink = cssVar('--ink') || '#18233D';
+  const muted = cssVar('--muted') || '#56627A';
+  const c = document.createElement('canvas');
+  const g = c.getContext('2d');
+  const fonts = ['800 64px "Bricolage Grotesque", "Trebuchet MS", sans-serif', '400 40px "Atkinson Hyperlegible", "Segoe UI", sans-serif'];
+  let w = 0;
+  lines.forEach((t, i) => { g.font = fonts[Math.min(i, 1)]; w = Math.max(w, g.measureText(t).width); });
+  c.width = Math.ceil(w + 24);
+  c.height = lines.length === 1 ? 84 : 140;
+  lines.forEach((t, i) => {
+    g.font = fonts[Math.min(i, 1)];
+    g.fillStyle = i === 0 ? ink : muted;
+    g.textAlign = 'center'; g.textBaseline = 'top';
+    g.fillText(t, c.width / 2, i === 0 ? 6 : 82);
+  });
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({map: tex, transparent: true, depthWrite: false}));
+  const hgt = height * (c.height / 84);
+  sprite.scale.set(hgt * c.width / c.height, hgt, 1);
+  return sprite;
+}
+
+function canvasTexture(canvas, pixelated){
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = pixelated ? THREE.NearestFilter : THREE.LinearFilter;
+  return tex;
+}
+
+function frameCamera(){
+  const {camera, controls, group} = view;
+  const box = new THREE.Box3().setFromObject(group);
+  const pts = [];
+  for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) pts.push(new THREE.Vector3(x, y, z));
+  const portrait = camera.aspect < 1;
+  const dir = (portrait ? new THREE.Vector3(0.45, 0.85, 1) : new THREE.Vector3(0.95, 0.42, 1)).normalize();
+  const target = box.getCenter(new THREE.Vector3());
+  const place = d => { camera.position.copy(target).addScaledVector(dir, d); camera.lookAt(target); camera.updateMatrixWorld(); };
+  const bounds = () => {
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (const p of pts) { const q = p.clone().project(camera); x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); }
+    return {x0, x1, y0, y1};
+  };
+  let dist = 40;
+  for (let round = 0; round < 3; round++) {
+    let lo = 5, hi = 300;
+    for (let i = 0; i < 30; i++) {
+      dist = (lo + hi) / 2; place(dist);
+      const b = bounds();
+      if (b.x0 > -0.94 && b.x1 < 0.94 && b.y0 > -0.9 && b.y1 < 0.9) hi = dist; else lo = dist;
+    }
+    dist = hi; place(dist);
+    const b = bounds();
+    const mx = (b.x0 + b.x1) / 2, my = (b.y0 + b.y1) / 2;
+    const halfH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * dist, halfW = halfH * camera.aspect;
+    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+    target.addScaledVector(right, mx * halfW).addScaledVector(up, my * halfH);
+  }
+  place(dist);
+  controls.target.copy(target);
+  controls.maxDistance = dist * 2.5;
+  controls.update();
+}
+
+async function build3D(){
+  const {group, rfGroup} = view;
+  disposeTree(group); disposeTree(rfGroup);
+  view.pickables = [];
+  view.stale = false;
+  await document.fonts.ready;
+  const {acts, chans, inputCanvas, stages, kind, netSize} = current;
+
+  const inputMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(INPUT, INPUT),
+    new THREE.MeshBasicMaterial({map: canvasTexture(inputCanvas, false), side: THREE.DoubleSide})
+  );
+  group.add(inputMesh);
+  const inLabel = makeLabel([kind === 'age' ? 'The face' : 'Your photo', `${netSize} × ${netSize} pixels`], 0.55);
+  inLabel.position.set(0, INPUT / 2 + 0.75, 0);
+  group.add(inLabel);
+
+  view.visible = mode === '3d';
+  view.controls.autoRotate = false;
+
+  const layerGroups = [];
+  acts.forEach((a, s) => {
+    const lg = new THREE.Group();
+    const z = -(s + 1) * GAP;
+    const size = 0.6 + 0.85 * Math.sqrt(Math.min(1, a.w / 112));
+    const cols = 4, rows = Math.ceil(chans[s].length / cols), step = size * 1.14;
+    chans[s].forEach((ch, i) => {
+      const col = i % cols, row = Math.floor(i / cols);
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(size, size),
+        new THREE.MeshBasicMaterial({map: canvasTexture(drawMap(document.createElement('canvas'), a, ch), true), side: THREE.DoubleSide})
+      );
+      mesh.position.set((col - (cols - 1) / 2) * step, ((rows - 1) / 2 - row) * step, z);
+      mesh.userData = {stage: s, ch, size};
+      lg.add(mesh);
+      view.pickables.push(mesh);
+    });
+    const label = makeLabel([stages[s].title, stages[s].what || `${a.w} × ${a.h} pixels`], 0.5);
+    label.position.set(0, rows * step / 2 + 0.7, z);
+    lg.add(label);
+    lg.visible = false;
+    group.add(lg);
+    layerGroups.push(lg);
+  });
+
+  // the guess
+  const og = new THREE.Group();
+  const zOut = -(acts.length + 1.8) * GAP;
+  const accent = new THREE.Color(cssVar('--accent') || '#3346D3');
+  if (kind === 'age') {
+    const age = Math.round(current.guess.age);
+    const big = makeLabel([String(age), 'years old'], 2.2);
+    big.position.set(0, 0.6, zOut);
+    og.add(big);
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(2.6, 0.12, 16, 80),
+      new THREE.MeshLambertMaterial({color: accent})
+    );
+    ring.position.set(0, 0.4, zOut - 0.3);
+    og.add(ring);
+    const gl = makeLabel(['The guess'], 0.55);
+    gl.position.set(0, 3.8, zOut);
+    og.add(gl);
+  } else {
+    const {probs, top} = current.guess;
+    top.forEach((idx, i) => {
+      const p = probs[idx];
+      const h = 0.15 + 4 * p;
+      const bar = new THREE.Mesh(
+        new THREE.BoxGeometry(0.7, h, 0.7),
+        new THREE.MeshLambertMaterial({color: accent.clone().lerp(new THREE.Color('#9aa6bf'), i === 0 ? 0 : 0.45)})
+      );
+      const x = (i - 2) * 1.7;
+      bar.position.set(x, -2 + h / 2, zOut);
+      og.add(bar);
+      const lab = makeLabel([nice(LABELS[idx] || ('class ' + idx)), (p * 100).toFixed(1) + '%'], i === 0 ? 0.42 : 0.3);
+      lab.position.set(x, -2 + h + 0.55, zOut);
+      og.add(lab);
+    });
+    const gl = makeLabel(['The guess'], 0.55);
+    gl.position.set(0, 3.6, zOut);
+    og.add(gl);
+  }
+  og.visible = false;
+  group.add(og);
+  layerGroups.push(og);
+  frameCamera();
+
+  for (const lg of layerGroups) {
+    await sleep(220);
+    lg.visible = true;
+  }
+  if (!reduceMotion) view.controls.autoRotate = true;
+}
+
+function clearRF(){ disposeTree(view.rfGroup); }
+
+function pick(e){
+  if (!current) return;
+  const {camera, renderer} = view;
+  const r = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(ndc, camera);
+  const hits = ray.intersectObjects(view.pickables, false);
+  if (!hits.length || !hits[0].uv) { clearRF(); return; }
+  const hit = hits[0];
+  const {stage, ch, size} = hit.object.userData;
+  const a = current.acts[stage];
+  const x = Math.min(a.w - 1, Math.floor(hit.uv.x * a.w));
+  const y = Math.min(a.h - 1, Math.floor((1 - hit.uv.y) * a.h));
+  showRF(hit.object, stage, ch, size, x, y);
+}
+
+function showRF(mesh, s, ch, size, x, y){
+  clearRF();
+  const a = current.acts[s];
+  const N = current.netSize;
+  const jump = N / a.w;
+  const rf = current.stages[s].rf || jump * 3;
+  const cx = (x + 0.5) * jump, cy = (y + 0.5) * jump;
+  const x0 = Math.max(0, cx - rf / 2), x1 = Math.min(N, cx + rf / 2);
+  const y0 = Math.max(0, cy - rf / 2), y1 = Math.min(N, cy + rf / 2);
+  const P = (px, py) => new THREE.Vector3((px / N - 0.5) * INPUT, (0.5 - py / N) * INPUT, 0.03);
+  const corners = [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)];
+
+  const local = (u, v) => mesh.localToWorld(new THREE.Vector3(u * size - size / 2, size / 2 - v * size, 0.03));
+  const cc = local((x + 0.5) / a.w, (y + 0.5) / a.h);
+  const sq = [local(x / a.w, y / a.h), local((x + 1) / a.w, y / a.h), local((x + 1) / a.w, (y + 1) / a.h), local(x / a.w, (y + 1) / a.h)];
+
+  const pts = [];
+  corners.forEach(c => pts.push(cc, c));
+  for (let i = 0; i < 4; i++) pts.push(corners[i], corners[(i + 1) % 4]);
+  for (let i = 0; i < 4; i++) pts.push(sq[i], sq[(i + 1) % 4]);
+  view.rfGroup.add(new THREE.LineSegments(
+    new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({color: RF_COLOR})
+  ));
+
+  const fill = new THREE.Mesh(
+    new THREE.PlaneGeometry((x1 - x0) / N * INPUT, (y1 - y0) / N * INPUT),
+    new THREE.MeshBasicMaterial({color: RF_COLOR, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false})
+  );
+  fill.position.copy(P((x0 + x1) / 2, (y0 + y1) / 2));
+  view.rfGroup.add(fill);
+  view.controls.autoRotate = false;
+
+  const whole = (x1 - x0) >= N - 1 && (y1 - y0) >= N - 1;
+  setStatus(`${current.stages[s].title}: this square looked at ${whole ? 'the whole photo' : 'the blue box on the photo'}.`);
+}
+
+/* ---------------- view switch ---------------- */
+function setMode(m){
+  mode = m;
+  $('btn3d').setAttribute('aria-pressed', m === '3d');
+  $('btnFlat').setAttribute('aria-pressed', m === 'flat');
+  $('view3d').hidden = m !== '3d';
+  $('flat').hidden = m !== 'flat';
+  view.visible = m === '3d' && view.ready;
+}
+$('btn3d').addEventListener('click', () => {
+  if (!view.has3D) return;
+  if (!view.ready) init3D();
+  setMode('3d');
+  if (current && (view.stale || !view.pickables.length)) build3D();
+});
+$('btnFlat').addEventListener('click', () => setMode('flat'));
+
+/* ---------------- app mode: what is it / how old ---------------- */
+async function setAppMode(m){
+  if (m === appMode || busy) return;
+  appMode = m;
+  closeCamera();
+  $('modeObj').setAttribute('aria-pressed', m === 'obj');
+  $('modeAge').setAttribute('aria-pressed', m === 'age');
+  $('pattern').hidden = m === 'age';
+  $('lede').textContent = m === 'age'
+    ? 'Show it a face. See how the computer breaks the face into small patterns, step by step, and then guesses an age.'
+    : 'Show it a picture. See how the computer breaks it into small patterns, step by step, and then guesses what it is.';
+  $('results').hidden = true;
+  current = null;
+  if (m === 'obj') {
+    if (objModel) { setStatus('Ready! Take or choose a photo.'); setButtons(true); }
+    else { setStatus('Getting ready…'); setButtons(false); }
+    return;
+  }
+  if (faceLoaded) { setStatus('Ready! Take or choose a photo of a face.'); setButtons(true); return; }
+  setStatus('Getting the face reader ready…'); setButtons(false);
+  try {
+    await ensureFace();
+    if (appMode === 'age') { setStatus('Ready! Take or choose a photo of a face.'); setButtons(true); }
+  } catch {
+    if (appMode === 'age') setStatus('The face reader didn’t load. Check the internet and try again.', true);
+  }
+}
+$('modeObj').addEventListener('click', () => setAppMode('obj'));
+$('modeAge').addEventListener('click', () => setAppMode('age'));
+
+/* ---------------- zoom dialog (flat view) ---------------- */
+const dlg = $('zoomDlg'), zBase = $('zoomBase'), zMap = $('zoomMap'), zMix = $('zoomMix');
+function openZoom(s, ch){
+  if (!current) return;
+  $('zoomTitle').textContent = `${current.stages[s].title}: one pattern`;
+  zBase.getContext('2d').drawImage(current.inputCanvas, 0, 0, zBase.width, zBase.height);
+  const small = drawMap(document.createElement('canvas'), current.acts[s], ch);
+  const mctx = zMap.getContext('2d');
+  mctx.clearRect(0, 0, zMap.width, zMap.height);
+  mctx.imageSmoothingEnabled = true;
+  mctx.imageSmoothingQuality = 'high';
+  mctx.drawImage(small, 0, 0, zMap.width, zMap.height);
+  zMix.value = 100; zMap.style.opacity = 1;
+  if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
+}
+zMix.addEventListener('input', () => zMap.style.opacity = zMix.value/100);
+$('zoomClose').addEventListener('click', () => dlg.close ? dlg.close() : dlg.removeAttribute('open'));
+dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+
+/* ---------------- inputs ---------------- */
+$('camBtn').addEventListener('click', openCamera);
+$('snap').addEventListener('click', snap);
+$('camCancel').addEventListener('click', () => { closeCamera(); setStatus('Ready! Take or choose a photo.'); });
+$('pick').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value = ''; });
+$('fileCam').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value = ''; });
+$('pattern').addEventListener('click', testPattern);
+const drop = $('drop');
+['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => loadFile(e.dataTransfer.files[0]));
+window.addEventListener('paste', e => {
+  const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (item) loadFile(item.getAsFile());
+});
+
+initObjects();
+
+</script>
+</body>
+</html>
